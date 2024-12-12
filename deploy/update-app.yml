@@ -1,0 +1,42 @@
+---
+- name: Update and rerun app
+  hosts: all
+  vars:
+    target_dir: '/root/gs2telebot'
+  tasks:
+    - name: Check if directory exists
+      stat: "path={{ target_dir }}"
+      register: cloned
+    - name: Clone if not cloned
+      when: not cloned.stat.exists
+      git:
+        repo: 'https://github.com/alois9866/gs2telebot.git'
+        dest: "{{ target_dir }}"
+        clone: true
+    - name: Pull if cloned
+      when: cloned.stat.exists
+      git:
+        repo: 'https://github.com/alois9866/gs2telebot.git'
+        dest: "{{ target_dir }}"
+        update: true
+    - name: Actualize venv
+      pip:
+        virtualenv: '{{ target_dir }}/.venv'
+        requirements: '{{ target_dir }}/requirements.txt'
+    - name: Check if running
+      shell: "ps -ef | grep 'bot\\.py' | grep -v grep | awk '{print $2}'"
+      ignore_errors: true
+      changed_when: false
+      register: app_status
+    - name: Print app PID
+      debug:
+        msg: 'App PID: {{ app_status.stdout }}'
+    - name: Kill running app
+      when: app_status.stdout | length > 0
+      shell: "kill {{ app_status.stdout }}"
+    - name: Run app
+      shell: 'nohup {{ target_dir }}/.venv/bin/python3 {{ target_dir }}/bot.py >>{{ target_dir }}/bot.log 2>>{{ target_dir }}/bot.log &'
+      environment:
+        BOT_TOKEN: "{{ hostvars[inventory_hostname].bot_token }}"
+        SHEET_URL: "{{ hostvars[inventory_hostname].sheet_url }}"
+
